@@ -17,12 +17,17 @@ export fn _start() noreturn {
 }
 
 const mem = @import("std").mem;
-const fmt = @import("std").fmt;
 extern var vga_buf: [4000]u8;
 extern var buf: [4000]u8;
 
 fn gameoflife() noreturn {
-    for (buf[0..4000]) |*b| b.* = 0;
+    var i: u16 = 0;
+    while (i < 4000) {
+        buf[i] = 0;
+        i += 1;
+        buf[i] = 15;
+        i += 1;
+    }
     for (vga_buf[0..4000]) |*b| b.* = 0;
     vga_buf[1322] = '#';
     vga_buf[1486] = '#';
