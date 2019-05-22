@@ -1,76 +1,95 @@
-const MultibootHeader = packed struct {
+export const multiboot_header align(4) linksection(".multiboot") = packed struct {
     magic: u32,
     flags: u32,
     checksum: u32,
-};
-
-export const multiboot_header align(4) linksection(".multiboot") = MultibootHeader {
+} {
     .magic = 0x1badb002,
-    .flags = 1,
-    .checksum = 0x100000000 - (0x1badb002 + 1),
+    .flags = 0,
+    .checksum = 0x100000000 - 0x1badb002,
 };
 
-export var stack: [256]u8 align(16) linksection(".bss") = undefined;
+const World = packed struct {
+    buf: [4000]u8,
+
+    fn init() World {
+        return World {
+            .buf = ([]u8{0, 15}) ** 2000,
+        };
+    }
+
+    fn get(self: World, x: i8, y: i8) bool {
+        return self.buf[(@intCast(usize, @mod(x, 80)) + @intCast(usize, @mod(y, 25))*80)*2] != 0;
+    }
+
+    fn set(self: *World, x: i8, y: i8) void {
+        self.buf[(@intCast(usize, @mod(x, 80)) + @intCast(usize, @mod(y, 25))*80)*2] = '#';
+    }
+
+    fn neighs(self: World, x: i8, y: i8) u8 {
+        var count: u8 = 0;
+        for ([][2]i8{
+            []i8{x-1, y-1}, []i8{x, y-1}, []i8{x+1, y-1},
+            []i8{x-1, y  },               []i8{x+1, y  },
+            []i8{x-1, y+1}, []i8{x, y+1}, []i8{x+1, y+1},
+        }) |c| {
+            if (self.get(c[0], c[1])) {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
+    fn step(self: *World) void {
+        var buf = World.init();
+
+        var row: i8 = 0;
+        var col: i8 = 0;
+        while (row < 25) {
+            while (col < 80) {
+                if (self.get(col, row)) {
+                    switch (self.neighs(col, row)) {
+                        2, 3 => { buf.set(col, row); },
+                        else => { },
+                    }
+                } else {
+                    if (self.neighs(col, row) == 3) {
+                        buf.set(col, row);
+                    }
+                }
+                col += 1;
+            }
+            col = 0;
+            row += 1;
+        }
+
+        @import("std").mem.copy(u8, self.buf[0..4000], buf.buf[0..4000]);
+    }
+};
+
+extern var vga_buf: World;
+var stack: [8192]u8 align(16) linksection(".bss") = undefined;
 
 export fn _start() noreturn {
     @newStackCall(stack[0..], gameoflife);
 }
 
-const mem = @import("std").mem;
-extern var vga_buf: [4000]u8;
-extern var buf: [4000]u8;
-
 fn gameoflife() noreturn {
-    var i: u16 = 0;
-    while (i < 4000) {
-        buf[i] = 0;
-        i += 1;
-        buf[i] = 15;
-        i += 1;
-    }
-    for (vga_buf[0..4000]) |*b| b.* = 0;
-    vga_buf[1322] = '#';
-    vga_buf[1486] = '#';
-    vga_buf[1640] = '#';
-    vga_buf[1642] = '#';
-    vga_buf[1648] = '#';
-    vga_buf[1650] = '#';
-    vga_buf[1652] = '#';
+    vga_buf = World.init();
+
+    vga_buf.set(21, 8);
+    vga_buf.set(23, 9);
+    vga_buf.set(20, 10);
+    vga_buf.set(21, 10);
+    vga_buf.set(24, 10);
+    vga_buf.set(25, 10);
+    vga_buf.set(26, 10);
+
     while (true) {
         var sleep: u32 = 10000000;
         while (sleep > 0) {
-            sleep = sleep -1;
+            sleep -= 1;
         }
-        var row: i16 = 0;
-        var col: i16 = 0;
-        while (row < 25) {
-            while (col < 80) {
-                if (vga_buf[@intCast(usize, col*2 + row*160)] == 0) {
-                    if (neighs(row, col) == 3) {
-                        buf[@intCast(usize, col*2 + row*160)] = '#';
-                    }
-                } else {
-                    switch (neighs(row, col)) {
-                        2, 3 => { buf[@intCast(usize, col*2 + row*160)] = '#';},
-                        else => { buf[@intCast(usize, col*2 + row*160)] = 0;},
-                    }
-                }
-                col = col + 1;
-            }
-            col = 0;
-            row = row + 1;
-        }
-        mem.copy(u8, vga_buf[0..4000], buf[0..4000]);
-    }
-}
 
-fn neighs(row: i16, col: i16) u8 {
-    return @intCast(u8, @boolToInt(vga_buf[@intCast(usize, @mod(col-1,80)*2 + @mod(row-1,25)*160)] != 0)) +
-           @intCast(u8, @boolToInt(vga_buf[@intCast(usize, col*2            + @mod(row-1,25)*160)] != 0)) +
-           @intCast(u8, @boolToInt(vga_buf[@intCast(usize, @mod(col+1,80)*2 + @mod(row-1,25)*160)] != 0)) +
-           @intCast(u8, @boolToInt(vga_buf[@intCast(usize, @mod(col-1,80)*2 + row*160           )] != 0)) +
-           @intCast(u8, @boolToInt(vga_buf[@intCast(usize, @mod(col+1,80)*2 + row*160           )] != 0)) +
-           @intCast(u8, @boolToInt(vga_buf[@intCast(usize, @mod(col-1,80)*2 + @mod(row+1,25)*160)] != 0)) +
-           @intCast(u8, @boolToInt(vga_buf[@intCast(usize, col*2            + @mod(row+1,25)*160)] != 0)) +
-           @intCast(u8, @boolToInt(vga_buf[@intCast(usize, @mod(col+1,80)*2 + @mod(row+1,25)*160)] != 0));
+        vga_buf.step();
+    }
 }
