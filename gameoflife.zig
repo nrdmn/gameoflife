@@ -69,7 +69,7 @@ const World = packed struct {
 extern var vga_buf: World;
 var stack: [8192]u8 align(16) linksection(".bss") = undefined;
 
-export fn _start() noreturn {
+export nakedcc fn _start() noreturn {
     @newStackCall(stack[0..], gameoflife);
 }
 
