@@ -74,6 +74,12 @@ export fn _start() noreturn {
 }
 
 fn gameoflife() noreturn {
+    asm volatile("out %%ax, %%dx"
+        :
+        : [_] "{ax}" (@intCast(u16, 0x200a)), [_] "{dx}" (@intCast(u16, 0x3d4))
+        : "dx", "ax"
+    );
+
     vga_buf = World.init();
 
     vga_buf.set(21, 8);
