@@ -62,7 +62,7 @@ const World = packed struct {
             row += 1;
         }
 
-        @import("std").mem.copy(u8, self.buf[0..4000], buf.buf[0..4000]);
+        self.* = buf;
     }
 };
 
